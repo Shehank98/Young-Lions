@@ -488,11 +488,12 @@ html, body {
 <script>
 // ─── CONFIG ──────────────────────────────────────────────────
 const CONFIG = {
-  mock: true,
+  // Auto-detects: localhost = mock mode, any real server = live API
+  mock: ['localhost', '127.0.0.1'].includes(window.location.hostname),
   apiBase: '/api',
   pollMs: 900,
-  audienceUrl: window.location.href.replace('presenter.html','index.html'),
-  maxTapsDisplay: 20,   // hearts shown in wall before "+N more"
+  audienceUrl: window.location.origin + '/',
+  maxTapsDisplay: 20,
 };
 
 // ─── STAGE DATA ───────────────────────────────────────────────

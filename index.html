@@ -341,9 +341,9 @@ html, body {
 <script>
 // ─── CONFIG ──────────────────────────────────────────────────
 const CONFIG = {
-  mock: false,         // true = localStorage (single device demo)
-                      // false = real backend (multi device)
-  apiBase: '/api',    // Change to your backend URL when mock = false
+  // Auto-detects: localhost = mock mode, any real server = live API
+  mock: ['localhost', '127.0.0.1'].includes(window.location.hostname),
+  apiBase: '/api',
   pollMs: 900,
 };
 
