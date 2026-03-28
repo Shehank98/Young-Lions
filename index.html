@@ -1,536 +1,659 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>Truth Wave — UNESCO × Young Lions Media</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>PULSE</title>
 <style>
-  :root {
-    --bg: #080c14;
-    --blue: #0af;
-    --blue-dim: #0af3;
-    --red: #ff3b5c;
-    --white: #f0f4ff;
-    --grey: #8899bb;
-    --card: #0d1626;
-    --border: #1a2a45;
-    --green: #00e87a;
-    --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); font-family: var(--font); color: var(--white); }
+/*
+  PULSE — Blood Donation Campaign
+  Audience Mobile Experience
+  ─────────────────────────────────────────────────────────────
+  API CONTRACT (set CONFIG.mock = false for real backend):
+    GET  /api/state  → { stage: number, taps: number }
+    POST /api/tap    → {} (records a donation tap)
+  ─────────────────────────────────────────────────────────────
+*/
 
-  /* ── SCROLL CONTAINER ── */
-  #deck {
-    width: 100%;
-    height: 100dvh;
-    overflow-y: scroll;
-    scroll-snap-type: y mandatory;
-    scroll-behavior: smooth;
-    -webkit-overflow-scrolling: touch;
-  }
-  .screen {
-    width: 100%;
-    height: 100dvh;
-    scroll-snap-align: start;
-    scroll-snap-stop: always;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 28px 24px;
-    position: relative;
-    overflow: hidden;
-  }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  /* ── PROGRESS DOTS ── */
-  #dots {
-    position: fixed;
-    right: 14px;
-    top: 50%;
-    transform: translateY(-50%);
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    z-index: 100;
-  }
-  .dot {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--border);
-    transition: background .3s, transform .3s;
-  }
-  .dot.active { background: var(--blue); transform: scale(1.5); }
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: #080c14;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+  color: #f0f4ff;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
 
-  /* ── SCREEN 0: HOOK ── */
-  #s0 { background: var(--bg); }
-  .logo-tag {
-    font-size: 11px; letter-spacing: 3px; text-transform: uppercase;
-    color: var(--grey); margin-bottom: 40px;
-  }
-  .typewriter {
-    font-size: clamp(26px, 7vw, 36px);
-    font-weight: 800;
-    line-height: 1.2;
-    text-align: center;
-    color: var(--white);
-    border-right: 3px solid var(--blue);
-    white-space: nowrap;
-    overflow: hidden;
-    width: 0;
-    animation: type 2.2s steps(38, end) .4s forwards, blink .7s step-end infinite;
-  }
-  @keyframes type { to { width: 100%; } }
-  @keyframes blink { 50% { border-color: transparent; } }
-  .s0-sub {
-    margin-top: 20px; font-size: 15px; color: var(--grey);
-    text-align: center; opacity: 0;
-    animation: fadein .6s ease 2.8s forwards;
-  }
-  .swipe-hint {
-    position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%);
-    display: flex; flex-direction: column; align-items: center; gap: 6px;
-    opacity: 0; animation: fadein .6s ease 3.2s forwards;
-  }
-  .swipe-hint span { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--grey); }
-  .swipe-arrow { width: 20px; height: 20px; border-right: 2px solid var(--blue); border-bottom: 2px solid var(--blue); transform: rotate(45deg); animation: bounce 1.2s infinite; }
-  @keyframes bounce { 0%,100%{transform:rotate(45deg) translateY(0)} 50%{transform:rotate(45deg) translateY(5px)} }
-  @keyframes fadein { to { opacity: 1; } }
+#app {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10vh 7vw 8vh;
+  position: relative;
+  overflow: hidden;
+  transition: background 1.6s ease;
+}
 
-  /* ── SECTION HEADER ── */
-  .sec-tag { font-size: 10px; letter-spacing: 3px; text-transform: uppercase; color: var(--blue); margin-bottom: 10px; }
-  .sec-title { font-size: clamp(22px, 6vw, 30px); font-weight: 800; line-height: 1.2; text-align: center; margin-bottom: 6px; }
-  .sec-sub { font-size: 13px; color: var(--grey); text-align: center; margin-bottom: 24px; line-height: 1.5; }
+/* ── STATUS ── */
+#status {
+  position: fixed;
+  top: 14px; left: 50%;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11px; letter-spacing: 0.15em;
+  color: #8899bb;
+  z-index: 50;
+  text-transform: uppercase;
+}
+#status-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #334;
+  transition: background 0.5s, box-shadow 0.5s;
+}
+#status-dot.live {
+  background: #00e87a;
+  box-shadow: 0 0 8px #00e87a;
+  animation: blink 1.8s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
 
-  /* ── SCREEN 1: PROBLEM ── */
-  #s1 { background: linear-gradient(160deg, #0a0f1e 60%, #110c1e); }
-  .stat-block { text-align: center; margin-bottom: 28px; }
-  .big-stat { font-size: clamp(52px, 14vw, 72px); font-weight: 900; color: var(--red); line-height: 1; }
-  .stat-label { font-size: 13px; color: var(--grey); margin-top: 4px; }
-  .bar-chart { width: 100%; }
-  .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-  .bar-label { font-size: 12px; color: var(--grey); width: 80px; text-align: right; flex-shrink: 0; }
-  .bar-track { flex: 1; height: 28px; background: var(--border); border-radius: 4px; overflow: hidden; }
-  .bar-fill { height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 10px; font-size: 12px; font-weight: 700; width: 0; transition: width 1s ease .3s; }
-  .bar-mis { background: linear-gradient(90deg, #ff3b5c, #ff7340); color: #fff; }
-  .bar-truth { background: linear-gradient(90deg, #0af, #00e87a); color: #080c14; }
-  .bar-note { font-size: 11px; color: var(--grey); text-align: center; margin-top: 8px; }
+/* ── BPM ── */
+#bpm-wrap {
+  text-align: center;
+  z-index: 2;
+  width: 100%;
+}
+#bpm-num {
+  font-size: clamp(76px, 22vw, 128px);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: #00e87a;
+  text-shadow: 0 0 50px #00e87a;
+  transition: color 1.5s ease, text-shadow 1.5s ease;
+  display: inline-block;
+}
+#bpm-label {
+  font-size: clamp(11px, 3.5vw, 16px);
+  letter-spacing: 0.35em;
+  color: #8899bb;
+  margin-top: 5px;
+  text-transform: uppercase;
+}
 
-  /* ── CHANNEL CARDS (screens 2,3,4) ── */
-  .channel-card {
-    width: 100%; background: var(--card); border: 1px solid var(--border);
-    border-radius: 16px; padding: 20px; margin-bottom: 16px;
-  }
-  .ch-header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-  .ch-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
-  .ch-icon-tv { background: #0af2; }
-  .ch-icon-radio { background: #a855f72b; }
-  .ch-icon-press { background: #00e87a22; }
-  .ch-name { font-size: 17px; font-weight: 700; }
-  .ch-time { font-size: 12px; color: var(--grey); }
-  .ch-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
-  .ch-stat { background: #0d1f35; border-radius: 8px; padding: 10px 12px; }
-  .ch-stat-val { font-size: 20px; font-weight: 800; color: var(--blue); }
-  .ch-stat-lbl { font-size: 11px; color: var(--grey); margin-top: 2px; }
-  .ch-stat-val.purple { color: #c084fc; }
-  .ch-stat-val.green { color: var(--green); }
-  .data-tag {
-    background: var(--blue-dim); border: 1px solid var(--blue);
-    border-radius: 8px; padding: 8px 12px;
-    font-size: 11px; color: var(--blue); line-height: 1.4;
-  }
-  .data-tag::before { content: '⬡ AI · '; font-weight: 700; }
+/* ── ECG CANVAS ── */
+#ecg-wrap {
+  width: 100%; height: 22vh;
+  z-index: 2;
+  position: relative;
+}
+#ecg {
+  width: 100%; height: 100%;
+  display: block;
+}
 
-  /* waveform */
-  .waveform { display: flex; align-items: center; justify-content: center; gap: 3px; height: 40px; margin: 12px 0; }
-  .wave-bar { width: 4px; border-radius: 2px; background: #a855f7; animation: wave-anim 1s ease-in-out infinite; }
-  .wave-bar:nth-child(1)  { height:14px; animation-delay:.0s }
-  .wave-bar:nth-child(2)  { height:28px; animation-delay:.1s }
-  .wave-bar:nth-child(3)  { height:36px; animation-delay:.2s }
-  .wave-bar:nth-child(4)  { height:20px; animation-delay:.3s }
-  .wave-bar:nth-child(5)  { height:32px; animation-delay:.4s }
-  .wave-bar:nth-child(6)  { height:24px; animation-delay:.5s }
-  .wave-bar:nth-child(7)  { height:38px; animation-delay:.6s }
-  .wave-bar:nth-child(8)  { height:16px; animation-delay:.7s }
-  .wave-bar:nth-child(9)  { height:30px; animation-delay:.8s }
-  .wave-bar:nth-child(10) { height:22px; animation-delay:.9s }
-  @keyframes wave-anim { 0%,100%{transform:scaleY(1)} 50%{transform:scaleY(1.6)} }
+/* ── MESSAGE ── */
+#msg {
+  text-align: center;
+  z-index: 2;
+  width: 100%;
+  min-height: 18vh;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 10px;
+}
+#msg-title {
+  font-size: clamp(20px, 6.5vw, 34px);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0; transform: translateY(12px);
+  transition: opacity 0.7s ease, transform 0.7s ease;
+}
+#msg-sub {
+  font-size: clamp(13px, 4vw, 18px);
+  color: #8899bb;
+  line-height: 1.5;
+  opacity: 0; transform: translateY(12px);
+  transition: opacity 0.7s ease 0.18s, transform 0.7s ease 0.18s;
+}
+.show-msg #msg-title, .show-msg #msg-sub {
+  opacity: 1; transform: translateY(0);
+}
 
-  /* ── SCREEN 5: DATA SCIENCE ── */
-  #s5 { background: linear-gradient(160deg, #08101e 60%, #0c0c1e); }
-  .ds-cards { display: flex; flex-direction: column; gap: 12px; width: 100%; }
-  .ds-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
-  .ds-card-title { font-size: 13px; font-weight: 700; color: var(--blue); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
-  .ds-card-title .badge { background: var(--blue); color: #08101e; font-size: 9px; font-weight: 800; letter-spacing: 1px; padding: 2px 6px; border-radius: 4px; }
-  /* persona chips */
-  .personas { display: flex; flex-wrap: wrap; gap: 6px; }
-  .persona { padding: 5px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; border: 1px solid; }
-  .p1 { color: var(--blue); border-color: var(--blue); background: var(--blue-dim); }
-  .p2 { color: #c084fc; border-color: #a855f7; background: #a855f71a; }
-  .p3 { color: var(--green); border-color: var(--green); background: #00e87a18; }
-  .p4 { color: #fb923c; border-color: #f97316; background: #f9731618; }
-  /* reach curve */
-  .reach-curve { width: 100%; }
-  .curve-wrap { position: relative; height: 60px; }
-  .curve-svg { width: 100%; height: 60px; }
-  .curve-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--grey); margin-top: 4px; }
-  /* flow */
-  .flow { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
-  .flow-node { flex: 1; background: #0d1f35; border-radius: 8px; padding: 8px 4px; text-align: center; }
-  .flow-node-label { font-size: 10px; color: var(--grey); }
-  .flow-node-val { font-size: 14px; font-weight: 800; color: var(--white); }
-  .flow-arrow { color: var(--blue); font-size: 16px; flex-shrink: 0; }
+/* ── TAP OVERLAY ── */
+#tap-overlay {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  z-index: 20;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.6s ease;
+  background: rgba(8, 12, 20, 0.6);
+  backdrop-filter: blur(2px);
+}
+#tap-overlay.on { opacity: 1; pointer-events: all; }
 
-  /* ── SCREEN 6: LAUNCH ── */
-  #s6 { background: radial-gradient(ellipse at center, #0a1428 0%, #050810 70%); }
-  .launch-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; gap: 24px; }
-  .launch-title { font-size: 13px; letter-spacing: 3px; text-transform: uppercase; color: var(--grey); text-align: center; }
-  .push-btn {
-    position: relative;
-    width: 180px; height: 180px;
-    border-radius: 50%;
-    border: none; cursor: pointer;
-    background: radial-gradient(circle at 40% 35%, #1a6bff, #0033cc);
-    box-shadow: 0 0 0 12px #0af1, 0 0 60px #0af5;
-    color: #fff; font-size: 15px; font-weight: 800; letter-spacing: 1px;
-    text-transform: uppercase; line-height: 1.3;
-    animation: pulse-btn 2s ease-in-out infinite;
-    transition: transform .1s;
-    font-family: var(--font);
-  }
-  .push-btn:active { transform: scale(.94); }
-  @keyframes pulse-btn {
-    0%,100% { box-shadow: 0 0 0 12px #0af2, 0 0 60px #0af4; }
-    50%      { box-shadow: 0 0 0 22px #0af1, 0 0 90px #0af6; }
-  }
-  .push-btn.launched { animation: none; background: radial-gradient(circle at 40% 35%, #00e87a, #008844); box-shadow: 0 0 80px #00e87a99; }
-  /* ripple container */
-  #ripple-container { position: fixed; inset: 0; pointer-events: none; z-index: 200; }
-  .ripple { position: absolute; border-radius: 50%; border: 2px solid var(--blue); transform: translate(-50%,-50%) scale(0); animation: ripple-out .8s ease-out forwards; }
-  @keyframes ripple-out { to { transform: translate(-50%,-50%) scale(20); opacity: 0; } }
-  /* stats counters */
-  .launch-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; width: 100%; opacity: 0; transition: opacity .5s; }
-  .launch-stats.show { opacity: 1; }
-  .l-stat { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 6px; text-align: center; }
-  .l-stat-val { font-size: 18px; font-weight: 900; color: var(--green); }
-  .l-stat-lbl { font-size: 10px; color: var(--grey); margin-top: 3px; line-height: 1.3; }
-  .live-badge { background: var(--red); color: #fff; font-size: 11px; font-weight: 700; padding: 6px 18px; border-radius: 20px; letter-spacing: 2px; display: none; }
-  .live-badge.show { display: inline-block; animation: fadein .4s ease; }
-  /* confetti */
-  .confetti-piece { position: fixed; width: 8px; height: 8px; top: -10px; animation: conf-fall linear forwards; z-index: 300; pointer-events: none; }
-  @keyframes conf-fall {
-    to { transform: translateY(110dvh) rotate(720deg); opacity: 0; }
-  }
+#tap-btn {
+  width: min(58vw, 230px); height: min(58vw, 230px);
+  border-radius: 50%;
+  border: 2.5px solid #ff3b5c;
+  box-shadow: 0 0 30px #ff3b5c66, inset 0 0 25px rgba(255,59,92,.08);
+  background: rgba(255,59,92,.06);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  position: relative;
+  overflow: visible;
+  animation: tapGlow 2.2s ease-in-out infinite;
+  transition: transform 0.1s, border-color 0.8s, box-shadow 0.8s, background 0.8s;
+}
+#tap-btn.donated {
+  border-color: #00e87a;
+  box-shadow: 0 0 40px #00e87a66, inset 0 0 30px rgba(0,232,122,.1);
+  background: rgba(0,232,122,.07);
+  animation: tapGlowGreen 2.2s ease-in-out infinite;
+}
+@keyframes tapGlow {
+  0%,100%{box-shadow:0 0 20px #ff3b5c66}
+  50%{box-shadow:0 0 50px #ff3b5caa, 0 0 0 18px rgba(255,59,92,0)}
+}
+@keyframes tapGlowGreen {
+  0%,100%{box-shadow:0 0 20px #00e87a66}
+  50%{box-shadow:0 0 50px #00e87aaa, 0 0 0 18px rgba(0,232,122,0)}
+}
+#tap-btn:active { transform: scale(0.9); }
+
+#tap-icon { font-size: 42px; }
+#tap-label {
+  font-size: clamp(12px, 3.5vw, 15px);
+  font-weight: 700; letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #ff3b5c;
+  transition: color 0.8s;
+}
+#tap-btn.donated #tap-label { color: #00e87a; }
+#tap-check {
+  font-size: 24px;
+  opacity: 0; transform: scale(0.5);
+  transition: opacity 0.4s, transform 0.4s;
+  position: absolute; top: 16px; right: 20px;
+}
+#tap-btn.donated #tap-check { opacity: 1; transform: scale(1); }
+
+#tap-total {
+  margin-top: 22px;
+  font-size: 13px; letter-spacing: 0.12em;
+  color: #8899bb;
+}
+
+/* Ripple */
+.ripple {
+  position: absolute; border-radius: 50%;
+  border: 2px solid currentColor;
+  animation: rippleOut 0.9s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes rippleOut {
+  0% { width: 90%; height: 90%; top: 5%; left: 5%; opacity: .8; }
+  100% { width: 210%; height: 210%; top: -55%; left: -55%; opacity: 0; }
+}
+
+/* ── BEAT PULSE ── */
+@keyframes beat {
+  0%{transform:scale(1)} 18%{transform:scale(1.14)} 35%{transform:scale(1)}
+}
+.beating { animation: beat 0.38s ease-out; }
+
+/* ── CONNECTING SCREEN ── */
+#connecting {
+  position: fixed; inset: 0;
+  background: #080c14;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 18px; z-index: 100;
+  transition: opacity 1s ease;
+}
+#connecting.gone { opacity: 0; pointer-events: none; }
+
+#connect-heart {
+  font-size: 60px;
+  animation: heartPop 1.8s ease-in-out infinite;
+}
+@keyframes heartPop {
+  0%,100%{transform:scale(1); opacity:.5}
+  50%{transform:scale(1.1); opacity:1}
+}
+#connect-label {
+  font-size: 12px; letter-spacing: 0.3em;
+  color: #8899bb; text-transform: uppercase;
+}
+#connect-dots span {
+  display: inline-block; width: 6px; height: 6px;
+  border-radius: 50%; background: #334;
+  margin: 0 3px;
+  animation: dotFade 1.2s ease-in-out infinite;
+}
+#connect-dots span:nth-child(2){animation-delay:.2s}
+#connect-dots span:nth-child(3){animation-delay:.4s}
+@keyframes dotFade {0%,100%{background:#334;transform:scale(1)}50%{background:#0af;transform:scale(1.3)}}
+
+/* ── SAVED SCREEN ── */
+#saved {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 14px; z-index: 30;
+  opacity: 0; pointer-events: none;
+  transition: opacity 1.2s ease;
+}
+#saved.on { opacity: 1; }
+#saved-num {
+  font-size: clamp(88px, 28vw, 150px);
+  font-weight: 900; line-height: 1;
+  color: #00e87a;
+  text-shadow: 0 0 80px #00e87a;
+  letter-spacing: -0.04em;
+}
+#saved-label {
+  font-size: clamp(14px, 5vw, 22px);
+  letter-spacing: 0.25em; text-transform: uppercase;
+  color: #8899bb;
+}
+#saved-sub {
+  font-size: clamp(12px, 3.8vw, 16px);
+  color: #f0f4ff; opacity: 0.65;
+  text-align: center; padding: 0 24px;
+  line-height: 1.6;
+  max-width: 320px;
+}
+
+/* ── CONFETTI ── */
+.conf {
+  position: fixed;
+  top: -12px;
+  border-radius: 3px;
+  animation: fall linear forwards;
+  pointer-events: none;
+  z-index: 200;
+}
+@keyframes fall {
+  0%{transform:translateY(0) rotate(0deg);opacity:1}
+  85%{opacity:1}
+  100%{transform:translateY(108vh) rotate(680deg);opacity:0}
+}
 </style>
 </head>
 <body>
 
-<!-- Progress dots -->
-<nav id="dots">
-  <div class="dot active" data-i="0"></div>
-  <div class="dot" data-i="1"></div>
-  <div class="dot" data-i="2"></div>
-  <div class="dot" data-i="3"></div>
-  <div class="dot" data-i="4"></div>
-  <div class="dot" data-i="5"></div>
-  <div class="dot" data-i="6"></div>
-</nav>
+<div id="status">
+  <div id="status-dot"></div>
+  <span id="status-text">WAITING</span>
+</div>
 
-<!-- Ripple overlay -->
-<div id="ripple-container"></div>
+<div id="connecting">
+  <div id="connect-heart">❤️</div>
+  <div id="connect-label">Syncing to presenter</div>
+  <div id="connect-dots"><span></span><span></span><span></span></div>
+</div>
 
-<!-- ═══════════════════════════════════════ -->
-<div id="deck">
+<div id="app">
+  <div id="bpm-wrap">
+    <div id="bpm-num">72</div>
+    <div id="bpm-label">BPM</div>
+  </div>
 
-  <!-- SCREEN 0: HOOK -->
-  <section class="screen" id="s0">
-    <p class="logo-tag">UNESCO × Young Lions Media</p>
-    <h1 class="typewriter">A lie travels 6× faster than the truth.</h1>
-    <p class="s0-sub">A data-driven media strategy to change that.</p>
-    <div class="swipe-hint">
-      <span>Swipe up</span>
-      <div class="swipe-arrow"></div>
-    </div>
-  </section>
+  <div id="ecg-wrap">
+    <canvas id="ecg"></canvas>
+  </div>
 
-  <!-- SCREEN 1: THE PROBLEM -->
-  <section class="screen" id="s1">
-    <p class="sec-tag">The Problem</p>
-    <h2 class="sec-title">Misinformation is winning the media war.</h2>
-    <p class="sec-sub">We have the channels to fight back — if we use them with precision.</p>
+  <div id="msg">
+    <div id="msg-title"></div>
+    <div id="msg-sub"></div>
+  </div>
+</div>
 
-    <div class="stat-block">
-      <div class="big-stat" id="counter-main">0</div>
-      <div class="stat-label">people reached by misinformation daily</div>
-    </div>
+<div id="tap-overlay">
+  <div id="tap-btn">
+    <div id="tap-icon">🩸</div>
+    <div id="tap-label">Tap to Donate</div>
+    <div id="tap-check">✓</div>
+  </div>
+  <div id="tap-total">0 people donated</div>
+</div>
 
-    <div class="bar-chart">
-      <div class="bar-row">
-        <span class="bar-label">Mis-<br>information</span>
-        <div class="bar-track"><div class="bar-fill bar-mis" id="bar-mis" data-w="82">82%</div></div>
-      </div>
-      <div class="bar-row">
-        <span class="bar-label">Verified<br>Truth</span>
-        <div class="bar-track"><div class="bar-fill bar-truth" id="bar-truth" data-w="38">38%</div></div>
-      </div>
-      <p class="bar-note">Share of social reach — misinformation vs verified journalism</p>
-    </div>
-  </section>
-
-  <!-- SCREEN 2: TV -->
-  <section class="screen" id="s2">
-    <p class="sec-tag">Channel 01 — Television</p>
-    <h2 class="sec-title">Prime-Time<br>Emotional Storytelling</h2>
-    <div class="channel-card">
-      <div class="ch-header">
-        <div class="ch-icon ch-icon-tv">📺</div>
-        <div>
-          <div class="ch-name">TV Broadcast</div>
-          <div class="ch-time">Weekdays · 8 PM – 10 PM</div>
-        </div>
-      </div>
-      <div class="ch-stats">
-        <div class="ch-stat"><div class="ch-stat-val">12M</div><div class="ch-stat-lbl">Reach</div></div>
-        <div class="ch-stat"><div class="ch-stat-val">3.2×</div><div class="ch-stat-lbl">Avg Frequency</div></div>
-        <div class="ch-stat"><div class="ch-stat-val">+44%</div><div class="ch-stat-lbl">Trust Lift</div></div>
-        <div class="ch-stat"><div class="ch-stat-val">2.3M</div><div class="ch-stat-lbl">Target Segment</div></div>
-      </div>
-      <div class="data-tag">Timeslot selected by AI model trained on misinformation spike patterns — accuracy 91%</div>
-    </div>
-  </section>
-
-  <!-- SCREEN 3: RADIO -->
-  <section class="screen" id="s3">
-    <p class="sec-tag">Channel 02 — Radio</p>
-    <h2 class="sec-title">Commute-Hour<br>Audio Targeting</h2>
-    <div class="channel-card">
-      <div class="ch-header">
-        <div class="ch-icon ch-icon-radio">🎙</div>
-        <div>
-          <div class="ch-name">Radio Broadcast</div>
-          <div class="ch-time">Mon – Fri · 7 AM – 9 AM</div>
-        </div>
-      </div>
-      <div class="waveform">
-        <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
-        <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
-        <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
-        <div class="wave-bar"></div>
-      </div>
-      <div class="ch-stats">
-        <div class="ch-stat"><div class="ch-stat-val purple">4.8M</div><div class="ch-stat-lbl">Reach</div></div>
-        <div class="ch-stat"><div class="ch-stat-val purple">+47%</div><div class="ch-stat-lbl">Engagement Lift</div></div>
-        <div class="ch-stat"><div class="ch-stat-val purple">32 sec</div><div class="ch-stat-lbl">Avg Listen Time</div></div>
-        <div class="ch-stat"><div class="ch-stat-val purple">18%</div><div class="ch-stat-lbl">Search Lift</div></div>
-      </div>
-      <div class="data-tag" style="color:#c084fc;border-color:#a855f7;background:#a855f71a;">Geo-targeted to high-misinformation postcodes via NLP cluster model v2.1</div>
-    </div>
-  </section>
-
-  <!-- SCREEN 4: PRESS -->
-  <section class="screen" id="s4">
-    <p class="sec-tag">Channel 03 — Press</p>
-    <h2 class="sec-title">Print Credibility<br>+ Digital Bridge</h2>
-    <div class="channel-card">
-      <div class="ch-header">
-        <div class="ch-icon ch-icon-press">📰</div>
-        <div>
-          <div class="ch-name">Press / Print</div>
-          <div class="ch-time">Weekend editions · Top 5 nationals</div>
-        </div>
-      </div>
-      <div class="ch-stats">
-        <div class="ch-stat"><div class="ch-stat-val green">+31%</div><div class="ch-stat-lbl">Trust Lift</div></div>
-        <div class="ch-stat"><div class="ch-stat-val green">4.2 min</div><div class="ch-stat-lbl">Avg Dwell</div></div>
-        <div class="ch-stat"><div class="ch-stat-val green">2.1M</div><div class="ch-stat-lbl">Circulation</div></div>
-        <div class="ch-stat"><div class="ch-stat-val green">23%</div><div class="ch-stat-lbl">QR Scan Rate</div></div>
-      </div>
-      <div class="data-tag" style="color:var(--green);border-color:var(--green);background:#00e87a1a;">Publications ranked by NLP Trust Index — only top-3 credibility-scored outlets selected</div>
-    </div>
-  </section>
-
-  <!-- SCREEN 5: DATA SCIENCE ENGINE -->
-  <section class="screen" id="s5">
-    <p class="sec-tag">Data Science Engine</p>
-    <h2 class="sec-title">The Brain Behind the Wave</h2>
-    <div class="ds-cards">
-
-      <div class="ds-card">
-        <div class="ds-card-title">Audience Segmentation <span class="badge">ML</span></div>
-        <div class="personas">
-          <span class="persona p1">Undecided Skeptics</span>
-          <span class="persona p2">Passive Consumers</span>
-          <span class="persona p3">Truth Champions</span>
-          <span class="persona p4">High-Risk Sharers</span>
-        </div>
-      </div>
-
-      <div class="ds-card">
-        <div class="ds-card-title">Predictive Reach Model <span class="badge">AI</span></div>
-        <div class="reach-curve">
-          <div class="curve-wrap">
-            <svg class="curve-svg" viewBox="0 0 300 60" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="cg" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="0%" stop-color="#0af" stop-opacity=".4"/>
-                  <stop offset="100%" stop-color="#0af" stop-opacity="0"/>
-                </linearGradient>
-              </defs>
-              <path d="M0,58 C30,58 50,30 80,18 C110,8 130,4 160,3 C190,2 220,5 260,12 L300,16 L300,60 L0,60Z" fill="url(#cg)"/>
-              <path d="M0,58 C30,58 50,30 80,18 C110,8 130,4 160,3 C190,2 220,5 260,12 L300,16" fill="none" stroke="#0af" stroke-width="2"/>
-            </svg>
-          </div>
-          <div class="curve-labels"><span>Week 1</span><span>Week 4</span><span>Week 8</span><span>Week 12</span></div>
-        </div>
-      </div>
-
-      <div class="ds-card">
-        <div class="ds-card-title">Cross-Channel Attribution <span class="badge">NLP</span></div>
-        <div class="flow">
-          <div class="flow-node"><div class="flow-node-val">TV</div><div class="flow-node-label">Awareness</div></div>
-          <div class="flow-arrow">→</div>
-          <div class="flow-node"><div class="flow-node-val">Radio</div><div class="flow-node-label">Recall</div></div>
-          <div class="flow-arrow">→</div>
-          <div class="flow-node"><div class="flow-node-val">Press</div><div class="flow-node-label">Trust</div></div>
-          <div class="flow-arrow">→</div>
-          <div class="flow-node" style="border:1px solid var(--green);"><div class="flow-node-val" style="color:var(--green)">+40%</div><div class="flow-node-label">Behaviour</div></div>
-        </div>
-      </div>
-
-    </div>
-  </section>
-
-  <!-- SCREEN 6: LAUNCH -->
-  <section class="screen" id="s6">
-    <div class="launch-wrap">
-      <p class="launch-title">Campaign Ready. Judges — your move.</p>
-      <button class="push-btn" id="pushBtn" onclick="launchCampaign()">PUSH TO<br>LAUNCH<br>TRUTH WAVE</button>
-      <div class="launch-stats" id="launchStats">
-        <div class="l-stat"><div class="l-stat-val" id="cnt-imp">0</div><div class="l-stat-lbl">Impressions</div></div>
-        <div class="l-stat"><div class="l-stat-val" id="cnt-reach">0%</div><div class="l-stat-lbl">Reach</div></div>
-        <div class="l-stat"><div class="l-stat-val" id="cnt-trust">0%</div><div class="l-stat-lbl">Trust Lift</div></div>
-      </div>
-      <div class="live-badge" id="liveBadge">● TRUTH WAVE IS LIVE</div>
-    </div>
-  </section>
-
-</div><!-- /deck -->
+<div id="saved">
+  <div id="saved-num">0</div>
+  <div id="saved-label">Lives Saved</div>
+  <div id="saved-sub">Through your collective action, PULSE changed everything.</div>
+</div>
 
 <script>
-// ─── Dot progress tracking ───────────────────────────────────────
-const screens = Array.from(document.querySelectorAll('.screen'));
-const dots    = Array.from(document.querySelectorAll('.dot'));
-const deck    = document.getElementById('deck');
+// ─── CONFIG ──────────────────────────────────────────────────
+const CONFIG = {
+  mock: true,         // true = localStorage (single device demo)
+                      // false = real backend (multi device)
+  apiBase: '/api',    // Change to your backend URL when mock = false
+  pollMs: 900,
+};
 
-const io = new IntersectionObserver(entries => {
-  entries.forEach(e => {
-    if (e.isIntersecting) {
-      const i = screens.indexOf(e.target);
-      dots.forEach((d,j) => d.classList.toggle('active', j===i));
-      onScreenEnter(e.target);
+// ─── STAGE DEFINITIONS ───────────────────────────────────────
+const STAGES = [
+  { id:0, bpm:72, amp:.5, color:'#0088ff', bg:'#080c14',
+    title:'', sub:'',
+    tap:false, saved:false, vibrate:null },
+
+  { id:1, bpm:72, amp:.62, color:'#00e87a', bg:'#030e07',
+    title:'YOUR HEART IS BEATING',
+    sub:'5 litres of blood. 72 times a minute. Right now.',
+    tap:false, saved:false, vibrate:null },
+
+  { id:2, bpm:50, amp:.52, color:'#ff8c00', bg:'#110800',
+    title:"BUT SOMEONE'S ISN'T",
+    sub:'Australia is 1.5 million blood units short — every single year.',
+    tap:false, saved:false, vibrate:[180,80,180] },
+
+  { id:3, bpm:22, amp:.36, color:'#ff3b5c', bg:'#180306',
+    title:'EVERY 2 SECONDS',
+    sub:'Someone needs blood. Right now. Waiting.',
+    tap:false, saved:false, vibrate:[500,200,600] },
+
+  { id:4, bpm:22, amp:.28, color:'#ff3b5c', bg:'#180306',
+    title:'ONE TAP.', sub:'One donation. One life.',
+    tap:true, saved:false, vibrate:null },
+
+  { id:5, bpm:88, amp:.68, color:'#00e87a', bg:'#031209',
+    title:'PULSE IS LIVE',
+    sub:"Your heartbeat just saved someone else's.",
+    tap:true, saved:false, vibrate:[80,40,80,40,80] },
+
+  { id:6, bpm:96, amp:.72, color:'#00e87a', bg:'#020a04',
+    title:'', sub:'',
+    tap:false, saved:true, vibrate:[200,100,200,100,500] },
+];
+
+// ─── BACKEND ADAPTER ─────────────────────────────────────────
+const Backend = {
+  _key: 'pulse_state',
+  _def: () => ({ stage: 0, taps: 0 }),
+
+  async getState() {
+    if (CONFIG.mock) {
+      try { return JSON.parse(localStorage.getItem(this._key)) || this._def(); }
+      catch { return this._def(); }
     }
-  });
-}, { root: deck, threshold: .5 });
+    const r = await fetch(`${CONFIG.apiBase}/state`);
+    return r.json();
+  },
 
-screens.forEach(s => io.observe(s));
+  async tap() {
+    if (CONFIG.mock) {
+      const s = await this.getState();
+      s.taps = (s.taps || 0) + 1;
+      localStorage.setItem(this._key, JSON.stringify(s));
+    } else {
+      await fetch(`${CONFIG.apiBase}/tap`, { method: 'POST' });
+    }
+  }
+};
 
-// ─── Dot tap-to-scroll ───────────────────────────────────────────
-dots.forEach(d => {
-  d.addEventListener('click', () => {
-    screens[+d.dataset.i].scrollIntoView({ behavior: 'smooth' });
-  });
-});
+// ─── ECG RENDERER ────────────────────────────────────────────
+class ECG {
+  constructor(canvas) {
+    this.c = canvas;
+    this.x = canvas.getContext('2d');
+    this.buf = new Array(320).fill(0.5);
+    this.bpm = 72;
+    this.amp = 0.62;
+    this.color = '#00e87a';
+    this.fc = 0;
+    this.fpb = this._fpb(72); // frames per beat
+    this.q = [];              // spike queue
+    this.onBeat = null;
+    this.raf = null;
+    this._resize();
+    window.addEventListener('resize', () => this._resize());
+  }
 
-// ─── Animate elements on screen enter ────────────────────────────
-const triggered = new Set();
-function onScreenEnter(screen) {
-  if (triggered.has(screen.id)) return;
-  triggered.add(screen.id);
+  _fpb(bpm) { return Math.max(6, Math.round(3600 / bpm)); }
 
-  if (screen.id === 's1') {
-    // counter
-    animateCount('counter-main', 0, 2.3e9, 1600, v => formatBig(v) + 'B');
-    // bars
+  _resize() {
+    const dpr = window.devicePixelRatio || 1;
+    this.c.width  = this.c.clientWidth  * dpr;
+    this.c.height = this.c.clientHeight * dpr;
+    this.x.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  set(bpm, amp, color) {
+    this.bpm = bpm; this.amp = amp; this.color = color;
+    this.fpb = this._fpb(bpm);
+  }
+
+  _spike() {
+    const a = this.amp, m = 0.5;
+    return [
+      m, m, m,
+      m-0.05*a, m-0.10*a, m-0.05*a,   // P wave
+      m, m,                             // PR
+      m+0.09*a,                         // Q
+      m-0.18*a, m-0.50*a, m-0.18*a,   // R (spike up)
+      m+0.22*a, m+0.10*a,              // S dip
+      m, m, m,                          // ST
+      m-0.06*a, m-0.13*a, m-0.06*a,   // T wave
+      m, m, m, m,
+    ];
+  }
+
+  _next() {
+    if (++this.fc >= this.fpb) {
+      this.fc = 0;
+      this.q.push(...this._spike());
+      if (this.onBeat) this.onBeat();
+    }
+    return this.q.length ? this.q.shift() : 0.5 + (Math.random() - .5) * 0.007;
+  }
+
+  _draw() {
+    const { c, x, buf, color } = this;
+    const W = c.clientWidth, H = c.clientHeight;
+
+    buf.shift();
+    buf.push(this._next());
+
+    x.clearRect(0, 0, W, H);
+
+    const g = x.createLinearGradient(0, 0, W, 0);
+    g.addColorStop(0,    color + '00');
+    g.addColorStop(0.35, color + '28');
+    g.addColorStop(0.72, color + 'aa');
+    g.addColorStop(1,    color);
+
+    x.beginPath();
+    x.strokeStyle = g;
+    x.lineWidth = 2;
+    x.lineJoin = 'round';
+    x.shadowBlur = 14;
+    x.shadowColor = color;
+
+    const n = buf.length;
+    for (let i = 0; i < n; i++) {
+      const px = (i / (n - 1)) * W;
+      const py = buf[i] * H;
+      i === 0 ? x.moveTo(px, py) : x.lineTo(px, py);
+    }
+    x.stroke();
+
+    this.raf = requestAnimationFrame(() => this._draw());
+  }
+
+  start() { this._draw(); }
+  stop()  { cancelAnimationFrame(this.raf); }
+}
+
+// ─── APP ─────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const App = {
+  stage: -1,
+  taps:   0,
+  myTap: false,
+  ecg:   null,
+
+  init() {
+    this.ecg = new ECG($('ecg'));
+    this.ecg.onBeat = () => {
+      const el = $('bpm-num');
+      el.classList.remove('beating');
+      void el.offsetWidth;
+      el.classList.add('beating');
+    };
+    this.ecg.start();
+
+    $('tap-btn').addEventListener('click', () => this._tap());
+
+    this._poll();
+    setInterval(() => this._poll(), CONFIG.pollMs);
+  },
+
+  async _tap() {
+    if (this.stage < 4) return;
+
+    await Backend.tap();
+    this.myTap = true;
+
+    const btn = $('tap-btn');
+    btn.classList.add('donated');
+    $('tap-label').textContent = 'DONATED';
+    $('tap-icon').textContent = '✅';
+
+    // Ripple
+    const r = document.createElement('div');
+    r.className = 'ripple';
+    r.style.color = this.myTap ? '#00e87a' : '#ff3b5c';
+    btn.appendChild(r);
+    setTimeout(() => r.remove(), 900);
+
+    if (navigator.vibrate) navigator.vibrate(60);
+  },
+
+  async _poll() {
+    try {
+      const state = await Backend.getState();
+
+      $('status-dot').classList.add('live');
+      $('status-text').textContent = 'LIVE';
+
+      // Update tap count
+      if (state.taps !== this.taps) {
+        this.taps = state.taps || 0;
+        $('tap-total').textContent =
+          `${this.taps} ${this.taps === 1 ? 'person' : 'people'} donated`;
+      }
+
+      if (state.stage !== this.stage) {
+        this._applyStage(state.stage, state.taps || 0);
+      } else if (state.stage === 6) {
+        this._countTo($('saved-num'), state.taps || 0);
+      }
+    } catch (_) {}
+  },
+
+  _applyStage(id, taps) {
+    const s = STAGES[id];
+    if (!s) return;
+
+    const prev = this.stage;
+    this.stage = id;
+
+    if (s.vibrate && navigator.vibrate) navigator.vibrate(s.vibrate);
+
+    // ECG update
+    this.ecg.set(s.bpm, s.amp, s.color);
+
+    // BPM display
+    const bpmEl = $('bpm-num');
+    bpmEl.textContent = s.bpm;
+    bpmEl.style.color = s.color;
+    bpmEl.style.textShadow = `0 0 50px ${s.color}`;
+
+    // Background
+    document.getElementById('app').style.background = s.bg;
+    document.body.style.background = s.bg;
+
+    // Connecting overlay
+    if (id === 0) {
+      $('connecting').classList.remove('gone');
+    } else if (prev === 0) {
+      $('connecting').classList.add('gone');
+    }
+
+    // Message — fade out then in
+    const msgEl = $('msg');
+    msgEl.classList.remove('show-msg');
     setTimeout(() => {
-      document.getElementById('bar-mis').style.width   = '82%';
-      document.getElementById('bar-truth').style.width = '38%';
-    }, 200);
+      $('msg-title').textContent = s.title;
+      $('msg-sub').textContent   = s.sub;
+      if (s.title || s.sub) msgEl.classList.add('show-msg');
+    }, 280);
+
+    // Tap overlay
+    id >= 4 && id <= 5
+      ? $('tap-overlay').classList.add('on')
+      : $('tap-overlay').classList.remove('on');
+
+    // Saved overlay
+    if (s.saved) {
+      $('saved-num').textContent = taps;
+      $('saved').classList.add('on');
+      this._confetti();
+    } else {
+      $('saved').classList.remove('on');
+    }
+  },
+
+  _countTo(el, target) {
+    const cur = parseInt(el.textContent) || 0;
+    if (cur === target) return;
+    const dur = 700, t0 = performance.now();
+    const tick = now => {
+      const p = Math.min(1, (now - t0) / dur);
+      el.textContent = Math.round(cur + (target - cur) * (1 - Math.pow(1 - p, 3)));
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  },
+
+  _confetti() {
+    const cols = ['#00e87a','#0af','#ff3b5c','#fff','#ffd700','#ff8c00'];
+    for (let i = 0; i < 70; i++) {
+      setTimeout(() => {
+        const el = document.createElement('div');
+        el.className = 'conf';
+        const sz = 5 + Math.random() * 8;
+        el.style.cssText = `
+          left:${Math.random()*100}vw;
+          width:${sz}px; height:${sz}px;
+          background:${cols[~~(Math.random()*cols.length)]};
+          border-radius:${Math.random()>.5?'50%':'3px'};
+          animation-duration:${2+Math.random()*2.5}s;
+        `;
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 5000);
+      }, i * 45);
+    }
   }
-}
+};
 
-function formatBig(n) {
-  return (n / 1e9).toFixed(1);
-}
-
-function animateCount(id, from, to, duration, fmt) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  const start = performance.now();
-  function step(now) {
-    const p = Math.min((now - start) / duration, 1);
-    const ease = 1 - Math.pow(1 - p, 3);
-    el.textContent = fmt ? fmt(from + (to - from) * ease) : Math.round(from + (to - from) * ease).toLocaleString();
-    if (p < 1) requestAnimationFrame(step);
-  }
-  requestAnimationFrame(step);
-}
-
-// ─── Launch button ────────────────────────────────────────────────
-let launched = false;
-function launchCampaign() {
-  if (launched) return;
-  launched = true;
-
-  const btn = document.getElementById('pushBtn');
-  btn.classList.add('launched');
-  btn.textContent = '✓ LIVE';
-
-  // Ripple
-  const rc = document.getElementById('ripple-container');
-  const rect = btn.getBoundingClientRect();
-  const cx = rect.left + rect.width / 2;
-  const cy = rect.top  + rect.height / 2;
-  for (let i = 0; i < 5; i++) {
-    setTimeout(() => {
-      const r = document.createElement('div');
-      r.className = 'ripple';
-      const size = 60 + i * 20;
-      r.style.cssText = `left:${cx}px;top:${cy}px;width:${size}px;height:${size}px;border-color:${i%2===0?'#0af':'#00e87a'};animation-delay:0s`;
-      rc.appendChild(r);
-      setTimeout(() => r.remove(), 900);
-    }, i * 160);
-  }
-
-  // Stats
-  const statsEl = document.getElementById('launchStats');
-  statsEl.classList.add('show');
-  animateCount('cnt-imp', 0, 19.2, 2000, v => v.toFixed(1) + 'M');
-  animateCount('cnt-reach', 0, 68, 2200, v => Math.round(v) + '%');
-  animateCount('cnt-trust', 0, 40, 2400, v => Math.round(v) + '%');
-
-  // Live badge
-  setTimeout(() => document.getElementById('liveBadge').classList.add('show'), 1800);
-
-  // Confetti
-  const colors = ['#0af','#00e87a','#ff3b5c','#c084fc','#fb923c','#fff'];
-  for (let i = 0; i < 60; i++) {
-    setTimeout(() => {
-      const c = document.createElement('div');
-      c.className = 'confetti-piece';
-      c.style.cssText = `
-        left:${Math.random()*100}vw;
-        background:${colors[Math.floor(Math.random()*colors.length)]};
-        border-radius:${Math.random()>.5?'50%':'2px'};
-        animation-duration:${1.2+Math.random()*1.4}s;
-        transform:rotate(${Math.random()*360}deg);
-        width:${6+Math.random()*8}px;
-        height:${6+Math.random()*8}px;
-      `;
-      document.body.appendChild(c);
-      setTimeout(() => c.remove(), 2800);
-    }, i * 40);
-  }
-}
+App.init();
 </script>
 </body>
 </html>

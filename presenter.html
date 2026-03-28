@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PULSE — Presenter</title>
+<style>
+/*
+  PULSE — Presenter Control + Big Screen View
+  ─────────────────────────────────────────────────────────────
+  KEYBOARD SHORTCUTS:
+    → or Space  = Next stage
+    ←           = Previous stage
+    0–6         = Jump to stage directly
+  ─────────────────────────────────────────────────────────────
+  API CONTRACT (set CONFIG.mock = false for real backend):
+    GET  /api/state        → { stage: number, taps: number }
+    POST /api/stage        → body: { stage: number }
+    POST /api/reset        → resets taps to 0
+  ─────────────────────────────────────────────────────────────
+*/
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #060a12;
+  --card: #0b1120;
+  --border: #172135;
+  --green: #00e87a;
+  --red: #ff3b5c;
+  --blue: #0af;
+  --orange: #ff8c00;
+  --white: #f0f4ff;
+  --grey: #8899bb;
+  --dim: #4a5878;
+}
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--white);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+  user-select: none;
+}
+
+/* ── LAYOUT ── */
+#layout {
+  display: grid;
+  grid-template-columns: 240px 1fr 280px;
+  grid-template-rows: 56px 1fr;
+  width: 100vw; height: 100vh;
+  gap: 1px;
+  background: var(--border);
+}
+
+/* ── HEADER ── */
+#header {
+  grid-column: 1 / -1;
+  background: var(--card);
+  display: flex; align-items: center;
+  padding: 0 20px;
+  gap: 24px;
+  border-bottom: 1px solid var(--border);
+}
+#logo {
+  font-size: 18px; font-weight: 900;
+  letter-spacing: 0.25em; color: var(--red);
+  text-shadow: 0 0 20px var(--red);
+}
+#logo span { color: var(--green); }
+#h-divider { width: 1px; height: 20px; background: var(--border); }
+#h-stage-name {
+  font-size: 13px; letter-spacing: 0.15em;
+  color: var(--grey); text-transform: uppercase;
+  flex: 1;
+}
+#h-keys {
+  font-size: 11px; color: var(--dim);
+  letter-spacing: 0.08em;
+}
+.key {
+  display: inline-block;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 11px; color: var(--grey);
+  margin: 0 2px;
+}
+#h-live {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; letter-spacing: 0.15em;
+  color: var(--grey); text-transform: uppercase;
+}
+#live-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--dim);
+  transition: background .4s, box-shadow .4s;
+}
+#live-dot.on {
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  animation: blink 1.8s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+/* ── LEFT PANEL — Stage Nav ── */
+#nav {
+  background: var(--card);
+  padding: 16px 12px;
+  display: flex; flex-direction: column; gap: 6px;
+  overflow-y: auto;
+}
+.stage-btn {
+  display: flex; align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: transparent;
+  color: var(--dim);
+}
+.stage-btn:hover { background: #0d1525; color: var(--grey); }
+.stage-btn.active {
+  border-color: var(--current-color, var(--blue));
+  background: color-mix(in srgb, var(--current-color, var(--blue)) 10%, transparent);
+  color: var(--white);
+}
+.snum {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 1px solid currentColor;
+  font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.sname { font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; font-weight: 600; }
+.sdesc { font-size: 10px; color: var(--dim); line-height: 1.3; }
+
+#nav-footer {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: flex; gap: 8px;
+}
+.nav-arrow {
+  flex: 1;
+  padding: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--grey);
+  font-size: 18px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s;
+}
+.nav-arrow:hover { background: #0d1525; color: var(--white); }
+.nav-arrow:active { transform: scale(0.94); }
+
+/* ── CENTER — BIG SCREEN ── */
+#stage-view {
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 32px;
+  position: relative;
+  overflow: hidden;
+  transition: background 1.5s ease;
+}
+
+/* Ambient glow */
+#stage-view::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 100%, var(--glow-color, transparent) 0%, transparent 65%);
+  transition: background 1.5s ease;
+  pointer-events: none;
+}
+
+#stage-bpm {
+  font-size: clamp(80px, 12vw, 160px);
+  font-weight: 900; letter-spacing: -0.04em; line-height: 1;
+  text-align: center;
+  color: var(--green);
+  text-shadow: 0 0 80px var(--green);
+  transition: color 1.5s, text-shadow 1.5s;
+  z-index: 1;
+}
+#stage-bpm-label {
+  font-size: 14px; letter-spacing: 0.4em;
+  color: var(--grey); margin-top: 6px;
+  text-align: center; text-transform: uppercase;
+  z-index: 1;
+}
+#stage-ecg-wrap {
+  width: 70%; height: 100px;
+  z-index: 1;
+}
+#stage-ecg { width: 100%; height: 100%; display: block; }
+
+#stage-message {
+  text-align: center; z-index: 1;
+  padding: 0 40px;
+}
+#stage-title {
+  font-size: clamp(22px, 3.5vw, 44px);
+  font-weight: 800; letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0; transform: translateY(14px);
+  transition: opacity .7s, transform .7s;
+}
+#stage-sub {
+  font-size: clamp(13px, 1.8vw, 20px);
+  color: var(--grey); margin-top: 10px;
+  line-height: 1.5;
+  opacity: 0; transform: translateY(14px);
+  transition: opacity .7s .2s, transform .7s .2s;
+}
+.show #stage-title, .show #stage-sub { opacity:1; transform:translateY(0); }
+
+/* Audience wall (stage 5) */
+#wall {
+  position: absolute; inset: 0;
+  display: none;
+  flex-wrap: wrap;
+  align-content: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  z-index: 2;
+}
+#wall.on { display: flex; }
+
+.heart-cell {
+  font-size: 28px;
+  opacity: 0;
+  transform: scale(0);
+  animation: heartIn 0.4s ease-out forwards;
+}
+@keyframes heartIn {
+  0%{opacity:0;transform:scale(0)}
+  70%{transform:scale(1.2)}
+  100%{opacity:1;transform:scale(1)}
+}
+.heart-cell.beating { animation: heartBeat 0.5s ease-out; }
+@keyframes heartBeat {
+  0%{transform:scale(1)} 30%{transform:scale(1.3)} 100%{transform:scale(1)}
+}
+
+/* Stage 0 intro */
+#intro-screen {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 16px; z-index: 3;
+  background: var(--bg);
+  opacity: 0; pointer-events: none;
+  transition: opacity .8s;
+}
+#intro-screen.on { opacity: 1; pointer-events: all; }
+#intro-logo {
+  font-size: clamp(50px, 10vw, 100px);
+  font-weight: 900; letter-spacing: 0.25em;
+  color: var(--red);
+  text-shadow: 0 0 60px var(--red);
+}
+#intro-tagline {
+  font-size: clamp(14px, 2vw, 22px);
+  color: var(--grey); letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+#intro-qr {
+  margin-top: 20px;
+  padding: 16px 24px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  text-align: center;
+  background: var(--card);
+}
+#intro-url {
+  font-size: 18px; font-weight: 700;
+  color: var(--blue); letter-spacing: 0.05em;
+  font-family: 'Courier New', monospace;
+}
+#intro-url-label {
+  font-size: 11px; color: var(--dim);
+  letter-spacing: 0.15em; text-transform: uppercase;
+  margin-top: 6px;
+}
+
+/* ── RIGHT PANEL — Live Stats ── */
+#stats {
+  background: var(--card);
+  padding: 16px;
+  display: flex; flex-direction: column;
+  gap: 16px; overflow-y: auto;
+}
+
+.stat-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.stat-card-label {
+  font-size: 10px; letter-spacing: 0.2em;
+  color: var(--dim); text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.stat-card-value {
+  font-size: 36px; font-weight: 900;
+  letter-spacing: -0.02em; line-height: 1;
+  color: var(--white);
+  transition: color 0.5s;
+}
+.stat-card-sub {
+  font-size: 11px; color: var(--dim);
+  margin-top: 4px; letter-spacing: 0.08em;
+}
+
+#taps-card .stat-card-value { color: var(--green); }
+
+/* Progress bar */
+.stat-bar-wrap {
+  height: 4px; background: #1a2535;
+  border-radius: 2px; overflow: hidden;
+  margin-top: 10px;
+}
+.stat-bar {
+  height: 100%; border-radius: 2px;
+  background: var(--green);
+  transition: width 0.6s ease;
+}
+
+/* Stage progress */
+#stage-progress {
+  display: flex; gap: 4px;
+}
+.prog-dot {
+  flex: 1; height: 4px; border-radius: 2px;
+  background: var(--border);
+  transition: background 0.4s;
+}
+.prog-dot.done { background: var(--dim); }
+.prog-dot.active { background: var(--current-color, var(--blue)); }
+
+/* Instruction card */
+#instruction {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  flex: 1;
+}
+#instruction-label {
+  font-size: 10px; letter-spacing: 0.2em;
+  color: var(--dim); text-transform: uppercase;
+  margin-bottom: 8px;
+}
+#instruction-text {
+  font-size: 13px; color: var(--grey);
+  line-height: 1.6;
+}
+
+/* Audience URL display */
+#audience-url-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+#audience-url-label {
+  font-size: 10px; letter-spacing: 0.2em;
+  color: var(--dim); text-transform: uppercase;
+  margin-bottom: 8px;
+}
+#audience-url-val {
+  font-size: 13px; color: var(--blue);
+  font-family: 'Courier New', monospace;
+  word-break: break-all;
+}
+
+/* Reset btn */
+#reset-btn {
+  padding: 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--dim);
+  font-size: 11px; letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+#reset-btn:hover { border-color: var(--red); color: var(--red); }
+</style>
+</head>
+<body>
+
+<div id="layout">
+
+  <!-- HEADER -->
+  <div id="header">
+    <div id="logo">PULSE<span>●</span></div>
+    <div id="h-divider"></div>
+    <div id="h-stage-name">Stage 0 — Intro</div>
+    <div id="h-keys">
+      <span class="key">←</span><span class="key">→</span>
+      <span class="key">Space</span> to navigate
+    </div>
+    <div id="h-live"><div id="live-dot"></div><span id="live-text">OFFLINE</span></div>
+  </div>
+
+  <!-- LEFT: Stage Navigation -->
+  <div id="nav">
+    <!-- Buttons injected by JS -->
+    <div id="nav-footer">
+      <button class="nav-arrow" id="btn-prev">←</button>
+      <button class="nav-arrow" id="btn-next">→</button>
+    </div>
+  </div>
+
+  <!-- CENTER: Big Screen -->
+  <div id="stage-view">
+    <!-- Stage 0 intro overlay -->
+    <div id="intro-screen" class="on">
+      <div id="intro-logo">PULSE</div>
+      <div id="intro-tagline">A blood donation campaign</div>
+      <div id="intro-qr">
+        <div id="intro-url">Open on your phone →</div>
+        <div id="intro-url-label" id="audience-url-hint">Scan or visit the URL below</div>
+      </div>
+    </div>
+
+    <!-- Main display -->
+    <div id="stage-bpm">72</div>
+    <div id="stage-bpm-label">BPM</div>
+    <div id="stage-ecg-wrap">
+      <canvas id="stage-ecg"></canvas>
+    </div>
+    <div id="stage-message">
+      <div id="stage-title"></div>
+      <div id="stage-sub"></div>
+    </div>
+
+    <!-- Audience wall (stage 5) -->
+    <div id="wall"></div>
+  </div>
+
+  <!-- RIGHT: Live Stats -->
+  <div id="stats">
+    <div class="stat-card" id="taps-card">
+      <div class="stat-card-label">Total Donations</div>
+      <div class="stat-card-value" id="stat-taps">0</div>
+      <div class="stat-card-sub">audience taps</div>
+      <div class="stat-bar-wrap">
+        <div class="stat-bar" id="taps-bar" style="width:0%"></div>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-card-label">Current Stage</div>
+      <div class="stat-card-value" id="stat-stage">0/6</div>
+      <div class="stat-card-sub" id="stat-stage-name">Intro</div>
+      <div class="stat-bar-wrap" style="margin-top:10px">
+        <div id="stage-progress"></div>
+      </div>
+    </div>
+
+    <div id="instruction">
+      <div id="instruction-label">Presenter Note</div>
+      <div id="instruction-text">Point audience to the URL. Wait for them to connect, then advance.</div>
+    </div>
+
+    <div id="audience-url-card">
+      <div id="audience-url-label">Audience URL</div>
+      <div id="audience-url-val">— configure in CONFIG —</div>
+    </div>
+
+    <button id="reset-btn">↺ Reset taps</button>
+  </div>
+
+</div>
+
+<script>
+// ─── CONFIG ──────────────────────────────────────────────────
+const CONFIG = {
+  mock: true,
+  apiBase: '/api',
+  pollMs: 900,
+  audienceUrl: window.location.href.replace('presenter.html','index.html'),
+  maxTapsDisplay: 20,   // hearts shown in wall before "+N more"
+};
+
+// ─── STAGE DATA ───────────────────────────────────────────────
+const STAGES = [
+  { id:0, bpm:72,  amp:.50, color:'#0088ff', bg:'#080c14',
+    name:'Intro', title:'', sub:'',
+    note:'Point the audience to your URL. Wait for phones to connect, then press → to begin.',
+    wall:false },
+
+  { id:1, bpm:72,  amp:.62, color:'#00e87a', bg:'#030e07',
+    name:'Alive', title:'THE HUMAN HEART',
+    sub:'72 beats per minute. 5 litres of blood. 100,000 beats today alone.',
+    note:'Let the audience feel their own heartbeat. Pause here for 10–15 seconds.',
+    wall:false },
+
+  { id:2, bpm:50,  amp:.52, color:'#ff8c00', bg:'#110800',
+    name:'Shortage', title:'THE SYSTEM IS FAILING',
+    sub:'1.5 million blood units short. Every year. In Australia alone.',
+    note:'Audience phones are slowing down. Let the tension build.',
+    wall:false },
+
+  { id:3, bpm:22,  amp:.36, color:'#ff3b5c', bg:'#180306',
+    name:'Critical', title:'EVERY 2 SECONDS',
+    sub:'A child. A mother. A stranger. Waiting for blood that isn\'t there.',
+    note:'Audience phones are critical. Phones vibrate. Let silence sit here.',
+    wall:false },
+
+  { id:4, bpm:22,  amp:.28, color:'#ff3b5c', bg:'#180306',
+    name:'Action', title:'ONE TAP.',
+    sub:'A donation button just appeared on every phone in this room.',
+    note:'Say: "There\'s a button on your phone right now. Tap it." Then wait.',
+    wall:false },
+
+  { id:5, bpm:88,  amp:.68, color:'#00e87a', bg:'#031209',
+    name:'Live', title:'PULSE IS LIVE',
+    sub:'Watch the room come alive.',
+    note:'Watch the wall on the right. Every heart is someone in this room who just donated.',
+    wall:true },
+
+  { id:6, bpm:96,  amp:.72, color:'#00e87a', bg:'#020a04',
+    name:'Saved', title:'THIS IS PULSE.',
+    sub:'A campaign that turns every presentation into a donation event.',
+    note:'Final beat. Let it land. "This is what we built. This is PULSE."',
+    wall:false },
+];
+
+// ─── BACKEND ─────────────────────────────────────────────────
+const Backend = {
+  _key: 'pulse_state',
+  _def: () => ({ stage: 0, taps: 0 }),
+
+  async getState() {
+    if (CONFIG.mock) {
+      try { return JSON.parse(localStorage.getItem(this._key)) || this._def(); }
+      catch { return this._def(); }
+    }
+    const r = await fetch(`${CONFIG.apiBase}/state`);
+    return r.json();
+  },
+
+  async setStage(stage) {
+    if (CONFIG.mock) {
+      const s = await this.getState();
+      s.stage = stage;
+      localStorage.setItem(this._key, JSON.stringify(s));
+    } else {
+      await fetch(`${CONFIG.apiBase}/stage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage }),
+      });
+    }
+  },
+
+  async reset() {
+    if (CONFIG.mock) {
+      localStorage.setItem(this._key, JSON.stringify(this._def()));
+    } else {
+      await fetch(`${CONFIG.apiBase}/reset`, { method: 'POST' });
+    }
+  }
+};
+
+// ─── ECG (Big Screen) ─────────────────────────────────────────
+class ECG {
+  constructor(canvas) {
+    this.c = canvas;
+    this.x = canvas.getContext('2d');
+    this.buf = new Array(280).fill(0.5);
+    this.bpm = 72; this.amp = 0.62; this.color = '#00e87a';
+    this.fc = 0; this.fpb = this._fpb(72); this.q = [];
+    this.onBeat = null; this.raf = null;
+    this._resize();
+    window.addEventListener('resize', () => this._resize());
+  }
+  _fpb(bpm) { return Math.max(6, Math.round(3600 / bpm)); }
+  _resize() {
+    const dpr = window.devicePixelRatio || 1;
+    this.c.width  = this.c.clientWidth  * dpr;
+    this.c.height = this.c.clientHeight * dpr;
+    this.x.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  set(bpm, amp, color) {
+    this.bpm = bpm; this.amp = amp; this.color = color;
+    this.fpb = this._fpb(bpm);
+  }
+  _spike() {
+    const a = this.amp, m = 0.5;
+    return [m,m,m, m-.05*a,m-.10*a,m-.05*a, m,m, m+.09*a,
+            m-.18*a,m-.50*a,m-.18*a, m+.22*a,m+.10*a,
+            m,m,m, m-.06*a,m-.13*a,m-.06*a, m,m,m,m];
+  }
+  _next() {
+    if (++this.fc >= this.fpb) {
+      this.fc = 0; this.q.push(...this._spike());
+      if (this.onBeat) this.onBeat();
+    }
+    return this.q.length ? this.q.shift() : 0.5 + (Math.random()-.5)*.007;
+  }
+  _draw() {
+    const {c,x,buf,color} = this;
+    const W = c.clientWidth, H = c.clientHeight;
+    buf.shift(); buf.push(this._next());
+    x.clearRect(0,0,W,H);
+    const g = x.createLinearGradient(0,0,W,0);
+    g.addColorStop(0, color+'00'); g.addColorStop(.35, color+'28');
+    g.addColorStop(.72, color+'aa'); g.addColorStop(1, color);
+    x.beginPath(); x.strokeStyle=g; x.lineWidth=2.5;
+    x.lineJoin='round'; x.shadowBlur=18; x.shadowColor=color;
+    const n=buf.length;
+    for(let i=0;i<n;i++){
+      const px=(i/(n-1))*W, py=buf[i]*H;
+      i===0?x.moveTo(px,py):x.lineTo(px,py);
+    }
+    x.stroke();
+    this.raf = requestAnimationFrame(()=>this._draw());
+  }
+  start(){ this._draw(); }
+}
+
+// ─── APP ─────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+
+const App = {
+  stage: 0,
+  taps: 0,
+  ecg: null,
+  wallCount: 0,
+
+  init() {
+    this._buildNav();
+    this._buildProgress();
+
+    this.ecg = new ECG($('stage-ecg'));
+    this.ecg.onBeat = () => {
+      const el = $('stage-bpm');
+      el.style.transform = 'scale(1.06)';
+      setTimeout(() => el.style.transform = '', 180);
+      if (this.stage === 5) this._beatWall();
+    };
+    this.ecg.start();
+
+    // Set audience URL display
+    $('audience-url-val').textContent = CONFIG.audienceUrl;
+    $('intro-url').textContent = CONFIG.audienceUrl;
+
+    // Keyboard nav
+    document.addEventListener('keydown', e => {
+      if (e.code === 'ArrowRight' || e.code === 'Space') {
+        e.preventDefault(); this._goStage(this.stage + 1);
+      }
+      if (e.code === 'ArrowLeft') { e.preventDefault(); this._goStage(this.stage - 1); }
+      const n = parseInt(e.key);
+      if (!isNaN(n) && n >= 0 && n <= 6) this._goStage(n);
+    });
+
+    $('btn-next').addEventListener('click', () => this._goStage(this.stage + 1));
+    $('btn-prev').addEventListener('click', () => this._goStage(this.stage - 1));
+    $('reset-btn').addEventListener('click', async () => {
+      await Backend.reset();
+      this.taps = 0; this.wallCount = 0;
+      $('stat-taps').textContent = '0';
+      $('taps-bar').style.width = '0%';
+      $('wall').innerHTML = '';
+    });
+
+    this._applyStage(0);
+    this._poll();
+    setInterval(() => this._poll(), CONFIG.pollMs);
+  },
+
+  _buildNav() {
+    const nav = $('nav');
+    // Insert before footer
+    const footer = $('nav-footer');
+    STAGES.forEach(s => {
+      const btn = document.createElement('div');
+      btn.className = 'stage-btn';
+      btn.id = `sbtn-${s.id}`;
+      btn.style.setProperty('--current-color', s.color);
+      btn.innerHTML = `
+        <div class="snum">${s.id}</div>
+        <div>
+          <div class="sname">${s.name}</div>
+          <div class="sdesc">${s.bpm} BPM</div>
+        </div>
+      `;
+      btn.addEventListener('click', () => this._goStage(s.id));
+      nav.insertBefore(btn, footer);
+    });
+  },
+
+  _buildProgress() {
+    const wrap = $('stage-progress');
+    wrap.style.display = 'flex';
+    wrap.style.gap = '3px';
+    for (let i = 0; i < 7; i++) {
+      const d = document.createElement('div');
+      d.className = 'prog-dot'; d.id = `pdot-${i}`;
+      wrap.appendChild(d);
+    }
+  },
+
+  async _goStage(id) {
+    if (id < 0 || id > 6) return;
+    await Backend.setStage(id);
+    this._applyStage(id);
+  },
+
+  _applyStage(id) {
+    const s = STAGES[id];
+    if (!s) return;
+    this.stage = id;
+
+    // ECG
+    this.ecg.set(s.bpm, s.amp, s.color);
+
+    // BPM display
+    $('stage-bpm').textContent = s.bpm;
+    $('stage-bpm').style.color = s.color;
+    $('stage-bpm').style.textShadow = `0 0 80px ${s.color}`;
+    $('stage-bpm-label').style.color = '';
+
+    // Background + glow
+    $('stage-view').style.background = s.bg;
+    $('stage-view').style.setProperty('--glow-color', s.color + '22');
+
+    // Message
+    const msgEl = $('stage-message');
+    msgEl.classList.remove('show');
+    setTimeout(() => {
+      $('stage-title').textContent = s.title;
+      $('stage-sub').textContent = s.sub;
+      if (s.title || s.sub) msgEl.classList.add('show');
+    }, 250);
+
+    // Intro overlay
+    id === 0
+      ? $('intro-screen').classList.add('on')
+      : $('intro-screen').classList.remove('on');
+
+    // Wall
+    if (s.wall) {
+      $('wall').classList.add('on');
+    } else {
+      $('wall').classList.remove('on');
+    }
+
+    // Header
+    $('h-stage-name').textContent = `Stage ${id} — ${s.name}`;
+
+    // Instruction
+    $('instruction-text').textContent = s.note;
+
+    // Stats panel stage indicator
+    $('stat-stage').textContent = `${id}/6`;
+    $('stat-stage-name').textContent = s.name;
+
+    // Nav buttons
+    document.querySelectorAll('.stage-btn').forEach(b => {
+      b.classList.remove('active');
+      b.style.setProperty('--current-color', STAGES[parseInt(b.id.split('-')[1])].color);
+    });
+    const activeBtn = $(`sbtn-${id}`);
+    if (activeBtn) {
+      activeBtn.classList.add('active');
+      activeBtn.scrollIntoView({ block: 'nearest' });
+    }
+
+    // Progress dots
+    for (let i = 0; i < 7; i++) {
+      const dot = $(`pdot-${i}`);
+      dot.className = 'prog-dot' + (i < id ? ' done' : i === id ? ' active' : '');
+      if (i === id) dot.style.setProperty('--current-color', s.color);
+    }
+  },
+
+  async _poll() {
+    try {
+      const state = await Backend.getState();
+
+      $('live-dot').classList.add('on');
+      $('live-text').textContent = 'LIVE';
+
+      if ((state.taps || 0) !== this.taps) {
+        this.taps = state.taps || 0;
+        this._animCount($('stat-taps'), this.taps);
+        const pct = Math.min(100, (this.taps / 30) * 100);
+        $('taps-bar').style.width = pct + '%';
+
+        if (this.stage === 5) {
+          const newHearts = this.taps - this.wallCount;
+          for (let i = 0; i < newHearts && this.wallCount < CONFIG.maxTapsDisplay; i++) {
+            this._addHeart();
+          }
+        }
+      }
+    } catch (_) {}
+  },
+
+  _addHeart() {
+    this.wallCount++;
+    const wall = $('wall');
+    const cell = document.createElement('div');
+    cell.className = 'heart-cell';
+    cell.textContent = '❤️';
+    cell.style.animationDelay = (Math.random() * 0.3) + 's';
+    wall.appendChild(cell);
+  },
+
+  _beatWall() {
+    document.querySelectorAll('.heart-cell').forEach(h => {
+      h.classList.remove('beating');
+      void h.offsetWidth;
+      h.classList.add('beating');
+    });
+  },
+
+  _animCount(el, target) {
+    const start = parseInt(el.textContent) || 0;
+    if (start === target) return;
+    const dur = 600, t0 = performance.now();
+    const tick = now => {
+      const p = Math.min(1, (now - t0) / dur);
+      el.textContent = Math.round(start + (target - start) * (1 - Math.pow(1 - p, 3)));
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+};
+
+App.init();
+</script>
+</body>
+</html>
