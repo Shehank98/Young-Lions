@@ -510,6 +510,26 @@ html, body {
   font-size: 12px;
 }
 
+/* ── AUDIO TOGGLE ── */
+#audio-toggle {
+  position: fixed;
+  bottom: 18px; right: 18px;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  border: 1px solid #172135;
+  background: rgba(8,12,20,0.85);
+  color: #4a5878;
+  font-size: 15px;
+  cursor: pointer;
+  z-index: 60;
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(6px);
+  transition: border-color 0.25s, color 0.25s;
+  -webkit-tap-highlight-color: transparent;
+}
+#audio-toggle.active { border-color: #00e87a55; color: #8899bb; }
+#audio-toggle.muted  { color: #334; }
+
 /* ── CONFETTI ── */
 .conf {
   position: fixed;
@@ -527,6 +547,8 @@ html, body {
 </style>
 </head>
 <body>
+
+<button id="audio-toggle" title="Toggle heartbeat sound">🔇</button>
 
 <div id="status">
   <div id="status-dot"></div>
@@ -838,6 +860,81 @@ class ECG {
   stop()  { cancelAnimationFrame(this.raf); }
 }
 
+// ─── HEARTBEAT AUDIO ─────────────────────────────────────────
+class HeartbeatAudio {
+  constructor() {
+    this.ctx       = null;
+    this.muted     = true;   // start muted; first tap unmutes
+    this.volume    = 0;
+    this.bpm       = 72;
+    this._next     = 0;      // next scheduled beat time (AudioContext seconds)
+    this._timer    = null;
+    this._unlocked = false;
+  }
+
+  // Call on first user gesture
+  unlock() {
+    if (this._unlocked) return;
+    this._unlocked = true;
+    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    this.muted = false;
+    this._next = this.ctx.currentTime + 0.05;
+    this._tick();
+  }
+
+  setBpm(bpm)    { this.bpm = Math.max(1, bpm); }
+  setVolume(vol) { this.volume = vol; }
+
+  toggle() {
+    this.muted = !this.muted;
+    return this.muted;
+  }
+
+  _tick() {
+    if (!this.ctx) return;
+    const lookahead = 0.25; // seconds ahead to schedule
+    while (this._next < this.ctx.currentTime + lookahead) {
+      if (!this.muted && this.volume > 0.01) {
+        this._lubDub(this._next);
+      }
+      this._next += 60 / this.bpm;
+    }
+    this._timer = setTimeout(() => this._tick(), 80);
+  }
+
+  _lubDub(t) {
+    const v = this.volume;
+    this._tone(t,        68, 0.022, 0.11, v * 0.55);  // lub
+    this._tone(t + 0.17, 58, 0.018, 0.09, v * 0.38);  // dub
+  }
+
+  _tone(time, freq, attack, decay, gain) {
+    const { ctx } = this;
+    const osc  = ctx.createOscillator();
+    const filt = ctx.createBiquadFilter();
+    const g    = ctx.createGain();
+
+    filt.type = 'bandpass';
+    filt.frequency.value = freq * 1.6;
+    filt.Q.value = 0.9;
+
+    osc.connect(filt); filt.connect(g); g.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+
+    g.gain.setValueAtTime(0, time);
+    g.gain.linearRampToValueAtTime(gain, time + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + attack + decay);
+
+    osc.start(time);
+    osc.stop(time + attack + decay + 0.02);
+  }
+}
+
+// ─── STAGE AUDIO VOLUMES ─────────────────────────────────────
+// Indexed by stage id 0-8
+const STAGE_VOLUMES = [0, 0.65, 0.38, 0.18, 0.14, 0.14, 0.28, 0.82, 1.0];
+
 // ─── APP ─────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const App = {
@@ -845,6 +942,7 @@ const App = {
   taps:   0,
   myTap: false,
   ecg:   null,
+  audio: null,
   _clockInterval: null,
   _clockStart: 0,
   _oitTimeouts: [],
@@ -863,6 +961,28 @@ const App = {
       el.classList.add('beating');
     };
     this.ecg.start();
+
+    // Heartbeat audio — unlock on first interaction anywhere
+    this.audio = new HeartbeatAudio();
+    document.addEventListener('pointerdown', () => {
+      if (!this.audio._unlocked) {
+        this.audio.unlock();
+        $('audio-toggle').textContent = '🔊';
+        $('audio-toggle').classList.add('active');
+        $('audio-toggle').classList.remove('muted');
+      }
+    }, { once: true });
+
+    $('audio-toggle').addEventListener('click', e => {
+      e.stopPropagation();
+      if (!this.audio._unlocked) {
+        this.audio.unlock();
+      }
+      const muted = this.audio.toggle();
+      $('audio-toggle').textContent = muted ? '🔇' : '🔊';
+      $('audio-toggle').classList.toggle('muted', muted);
+      $('audio-toggle').classList.toggle('active', !muted);
+    });
 
     $('tap-btn').addEventListener('click', () => this._tap());
 
@@ -1000,8 +1120,12 @@ const App = {
 
     if (s.vibrate && navigator.vibrate) navigator.vibrate(s.vibrate);
 
-    // ECG update
+    // ECG + audio sync
     this.ecg.set(s.bpm, s.amp, s.color);
+    if (this.audio) {
+      this.audio.setBpm(s.bpm);
+      this.audio.setVolume(STAGE_VOLUMES[id] ?? 0);
+    }
 
     // BPM display
     const bpmEl = $('bpm-num');
