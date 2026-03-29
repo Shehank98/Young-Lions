@@ -416,6 +416,51 @@ html, body {
 }
 #flash-layer.flash { animation: flashRed 0.4s ease-out forwards; }
 
+/* ── DEDICATION SHEET ── */
+#dedication-sheet {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 40;
+  background: #0b1120;
+  border-top: 1px solid #ff3b5c44;
+  border-radius: 24px 24px 0 0;
+  padding: 28px 24px 44px;
+  display: flex; flex-direction: column;
+  gap: 12px;
+  transform: translateY(100%);
+  transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 -20px 60px rgba(255,59,92,0.12);
+}
+#dedication-sheet.up { transform: translateY(0); }
+
+#ded-title {
+  font-size: clamp(13px, 4vw, 17px);
+  font-weight: 800; letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #f0f4ff;
+  text-align: center;
+  margin-bottom: 6px;
+}
+.ded-btn {
+  padding: 17px 16px;
+  border-radius: 14px;
+  border: 1.5px solid #172135;
+  background: #080c14;
+  color: #f0f4ff;
+  font-size: clamp(14px, 4.5vw, 18px);
+  font-weight: 700; letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, color 0.2s, transform 0.1s;
+  text-align: center;
+  -webkit-tap-highlight-color: transparent;
+}
+.ded-btn:active { transform: scale(0.96); }
+.ded-btn.selected {
+  border-color: #00e87a;
+  background: rgba(0,232,122,0.09);
+  color: #00e87a;
+}
+
 /* ── CONFETTI ── */
 .conf {
   position: fixed;
@@ -529,6 +574,14 @@ html, body {
   <div id="clock-label">people have needed blood<br>since you opened this page</div>
 </div>
 
+<!-- Dedication bottom sheet -->
+<div id="dedication-sheet">
+  <div id="ded-title">Who are you donating for?</div>
+  <button class="ded-btn" data-type="love">❤️ &nbsp;Someone I Love</button>
+  <button class="ded-btn" data-type="stranger">🤝 &nbsp;A Stranger</button>
+  <button class="ded-btn" data-type="future">🌟 &nbsp;The Future</button>
+</div>
+
 <div id="saved">
   <div id="saved-num">0</div>
   <div id="saved-label">Lives Saved</div>
@@ -608,6 +661,21 @@ const Backend = {
       localStorage.setItem(this._key, JSON.stringify(s));
     } else {
       await fetch(`${CONFIG.apiBase}/tap`, { method: 'POST' });
+    }
+  },
+
+  async dedication(type) {
+    if (CONFIG.mock) {
+      const s = await this.getState();
+      if (!s.dedications) s.dedications = { love: 0, stranger: 0, future: 0 };
+      s.dedications[type] = (s.dedications[type] || 0) + 1;
+      localStorage.setItem(this._key, JSON.stringify(s));
+    } else {
+      await fetch(`${CONFIG.apiBase}/dedication`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type }),
+      });
     }
   }
 };
@@ -715,6 +783,7 @@ const App = {
   _clockInterval: null,
   _clockStart: 0,
   _oitTimeouts: [],
+  _dedShown: false,
 
   init() {
     this.ecg = new ECG($('ecg'));
@@ -727,6 +796,16 @@ const App = {
     this.ecg.start();
 
     $('tap-btn').addEventListener('click', () => this._tap());
+
+    document.querySelectorAll('.ded-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (btn.classList.contains('selected')) return;
+        document.querySelectorAll('.ded-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        await Backend.dedication(btn.dataset.type);
+        setTimeout(() => this._hideDedication(), 1600);
+      });
+    });
 
     this._poll();
     setInterval(() => this._poll(), CONFIG.pollMs);
@@ -746,11 +825,26 @@ const App = {
     // Ripple
     const r = document.createElement('div');
     r.className = 'ripple';
-    r.style.color = this.myTap ? '#00e87a' : '#ff3b5c';
+    r.style.color = '#00e87a';
     btn.appendChild(r);
     setTimeout(() => r.remove(), 900);
 
     if (navigator.vibrate) navigator.vibrate(60);
+
+    // Slide up dedication sheet on first tap only
+    if (!this._dedShown) {
+      this._dedShown = true;
+      setTimeout(() => this._showDedication(), 700);
+    }
+  },
+
+  _showDedication() {
+    document.querySelectorAll('.ded-btn').forEach(b => b.classList.remove('selected'));
+    $('dedication-sheet').classList.add('up');
+  },
+
+  _hideDedication() {
+    $('dedication-sheet').classList.remove('up');
   },
 
   async _poll() {
