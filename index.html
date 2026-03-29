@@ -461,6 +461,55 @@ html, body {
   color: #00e87a;
 }
 
+/* ── HOLD-TO-PLEDGE (Stage 8) ── */
+#pledge-wrap {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  margin-top: 28px;
+  width: 100px; height: 100px;
+  flex-shrink: 0;
+}
+#pledge-ring-svg {
+  position: absolute; inset: 0;
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+#pledge-ring-circle {
+  fill: none;
+  stroke: #00e87a;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-dasharray: 283;
+  stroke-dashoffset: 283;
+  transition: stroke 0.3s;
+}
+#pledge-btn {
+  width: 86px; height: 86px;
+  border-radius: 50%;
+  border: 1.5px solid #00e87a55;
+  background: rgba(0,232,122,0.06);
+  color: #00e87a;
+  font-size: 10px;
+  font-weight: 800; letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 1.4;
+  cursor: pointer;
+  user-select: none; -webkit-user-select: none;
+  touch-action: none;
+  transition: background 0.3s, border-color 0.3s, transform 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+#pledge-btn:active { transform: scale(0.96); }
+#pledge-btn.holding {
+  background: rgba(0,232,122,0.12);
+  border-color: #00e87a;
+}
+#pledge-btn.pledged {
+  background: rgba(0,232,122,0.18);
+  border-color: #00e87a;
+  font-size: 12px;
+}
+
 /* ── CONFETTI ── */
 .conf {
   position: fixed;
@@ -586,6 +635,12 @@ html, body {
   <div id="saved-num">0</div>
   <div id="saved-label">Lives Saved</div>
   <div id="saved-sub">Through your collective action, PULSE changed everything.</div>
+  <div id="pledge-wrap">
+    <svg id="pledge-ring-svg" viewBox="0 0 100 100" width="100" height="100">
+      <circle id="pledge-ring-circle" cx="50" cy="50" r="45"/>
+    </svg>
+    <button id="pledge-btn">HOLD<br>TO<br>PLEDGE</button>
+  </div>
 </div>
 
 <script>
@@ -661,6 +716,16 @@ const Backend = {
       localStorage.setItem(this._key, JSON.stringify(s));
     } else {
       await fetch(`${CONFIG.apiBase}/tap`, { method: 'POST' });
+    }
+  },
+
+  async pledge() {
+    if (CONFIG.mock) {
+      const s = await this.getState();
+      s.pledges = (s.pledges || 0) + 1;
+      localStorage.setItem(this._key, JSON.stringify(s));
+    } else {
+      await fetch(`${CONFIG.apiBase}/pledge`, { method: 'POST' });
     }
   },
 
@@ -784,6 +849,10 @@ const App = {
   _clockStart: 0,
   _oitTimeouts: [],
   _dedShown: false,
+  _pledgeDone: false,
+  _pledgeHolding: false,
+  _pledgeRaf: null,
+  _pledgeStart: 0,
 
   init() {
     this.ecg = new ECG($('ecg'));
@@ -796,6 +865,12 @@ const App = {
     this.ecg.start();
 
     $('tap-btn').addEventListener('click', () => this._tap());
+
+    const pb = $('pledge-btn');
+    pb.addEventListener('pointerdown', e => { e.preventDefault(); this._startHold(); });
+    pb.addEventListener('pointerup',     () => this._endHold());
+    pb.addEventListener('pointerleave',  () => this._endHold());
+    pb.addEventListener('pointercancel', () => this._endHold());
 
     document.querySelectorAll('.ded-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -836,6 +911,53 @@ const App = {
       this._dedShown = true;
       setTimeout(() => this._showDedication(), 700);
     }
+  },
+
+  _startHold() {
+    if (this._pledgeDone || this._pledgeHolding) return;
+    this._pledgeHolding = true;
+    this._pledgeStart = performance.now();
+    $('pledge-btn').classList.add('holding');
+    if (navigator.vibrate) navigator.vibrate(15);
+    this._pledgeRaf = requestAnimationFrame(() => this._holdTick());
+  },
+
+  _endHold() {
+    if (!this._pledgeHolding) return;
+    this._pledgeHolding = false;
+    cancelAnimationFrame(this._pledgeRaf);
+    if (!this._pledgeDone) {
+      $('pledge-btn').classList.remove('holding');
+      this._updateRing(0);
+    }
+  },
+
+  _holdTick() {
+    if (!this._pledgeHolding) return;
+    const p = Math.min(1, (performance.now() - this._pledgeStart) / 2000);
+    this._updateRing(p);
+    if (p < 1) {
+      this._pledgeRaf = requestAnimationFrame(() => this._holdTick());
+    } else {
+      this._completePledge();
+    }
+  },
+
+  _updateRing(p) {
+    const c = $('pledge-ring-circle');
+    if (c) c.style.strokeDashoffset = 283 * (1 - p);
+  },
+
+  async _completePledge() {
+    this._pledgeDone = true;
+    this._pledgeHolding = false;
+    const btn = $('pledge-btn');
+    btn.classList.remove('holding');
+    btn.classList.add('pledged');
+    btn.innerHTML = 'PLEDGED<br>✓';
+    this._updateRing(1);
+    if (navigator.vibrate) navigator.vibrate([80, 40, 80, 40, 200]);
+    await Backend.pledge();
   },
 
   _showDedication() {
