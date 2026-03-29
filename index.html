@@ -278,6 +278,44 @@ html, body {
   max-width: 320px;
 }
 
+/* ── 1 IN 3 OVERLAY (Stage 4) ── */
+#one-in-three {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 28px; z-index: 26;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.6s ease;
+  background: rgba(24, 3, 6, 0.97);
+  padding: 32px;
+}
+#one-in-three.on { opacity: 1; }
+
+#oit-line1, #oit-line2 {
+  font-size: clamp(68px, 24vw, 130px);
+  font-weight: 900; line-height: 1;
+  letter-spacing: 0.04em;
+  color: #ff3b5c;
+  text-shadow: 0 0 60px #ff3b5c88;
+  text-align: center;
+  text-transform: uppercase;
+  opacity: 0; transform: scale(0.75);
+  transition: opacity 0.45s ease, transform 0.45s ease;
+}
+#oit-line3 {
+  font-size: clamp(18px, 6.5vw, 34px);
+  font-weight: 800; line-height: 1.35;
+  letter-spacing: 0.06em;
+  color: #f0f4ff;
+  text-align: center;
+  text-transform: uppercase;
+  opacity: 0; transform: translateY(18px);
+  transition: opacity 0.7s ease, transform 0.7s ease;
+  max-width: 340px;
+}
+#oit-line1.show, #oit-line2.show { opacity: 1; transform: scale(1); }
+#oit-line3.show { opacity: 1; transform: translateY(0); }
+
 /* ── TICKING CLOCK (Stage 3) ── */
 #clock-overlay {
   position: fixed; inset: 0;
@@ -375,6 +413,13 @@ html, body {
 <!-- Flash layer for clock ticks -->
 <div id="flash-layer"></div>
 
+<!-- 1 in 3 overlay (Stage 4) -->
+<div id="one-in-three">
+  <div id="oit-line1">LOOK<br>LEFT</div>
+  <div id="oit-line2">LOOK<br>RIGHT</div>
+  <div id="oit-line3">One of you three will need<br>blood in your lifetime</div>
+</div>
+
 <!-- Ticking clock (Stage 3) -->
 <div id="clock-overlay">
   <div id="clock-count">0</div>
@@ -417,16 +462,20 @@ const STAGES = [
     sub:'Someone needs blood. Right now. Waiting.',
     tap:false, saved:false, vibrate:[500,200,600] },
 
-  { id:4, bpm:22, amp:.28, color:'#ff3b5c', bg:'#180306',
+  { id:4, bpm:40, amp:.32, color:'#ff3b5c', bg:'#180306',
+    title:'', sub:'',
+    tap:false, saved:false, vibrate:[250,100,250] },
+
+  { id:5, bpm:22, amp:.28, color:'#ff3b5c', bg:'#180306',
     title:'ONE TAP.', sub:'One donation. One life.',
     tap:true, saved:false, vibrate:null },
 
-  { id:5, bpm:88, amp:.68, color:'#00e87a', bg:'#031209',
+  { id:6, bpm:88, amp:.68, color:'#00e87a', bg:'#031209',
     title:'PULSE IS LIVE',
     sub:"Your heartbeat just saved someone else's.",
     tap:true, saved:false, vibrate:[80,40,80,40,80] },
 
-  { id:6, bpm:96, amp:.72, color:'#00e87a', bg:'#020a04',
+  { id:7, bpm:96, amp:.72, color:'#00e87a', bg:'#020a04',
     title:'', sub:'',
     tap:false, saved:true, vibrate:[200,100,200,100,500] },
 ];
@@ -558,6 +607,7 @@ const App = {
   ecg:   null,
   _clockInterval: null,
   _clockStart: 0,
+  _oitTimeouts: [],
 
   init() {
     this.ecg = new ECG($('ecg'));
@@ -576,7 +626,7 @@ const App = {
   },
 
   async _tap() {
-    if (this.stage < 4) return;
+    if (this.stage < 5) return;
 
     await Backend.tap();
     this.myTap = true;
@@ -612,7 +662,7 @@ const App = {
 
       if (state.stage !== this.stage) {
         this._applyStage(state.stage, state.taps || 0);
-      } else if (state.stage === 6) {
+      } else if (state.stage === 7) {
         this._countTo($('saved-num'), state.taps || 0);
       }
     } catch (_) {}
@@ -657,7 +707,7 @@ const App = {
     }, 280);
 
     // Tap overlay
-    id >= 4 && id <= 5
+    id >= 5 && id <= 6
       ? $('tap-overlay').classList.add('on')
       : $('tap-overlay').classList.remove('on');
 
@@ -676,6 +726,47 @@ const App = {
     } else {
       this._stopClock();
     }
+
+    // 1-in-3 moment — start on stage 4, stop on any other stage
+    if (id === 4) {
+      this._startOneInThree();
+    } else {
+      this._stopOneInThree();
+    }
+  },
+
+  _startOneInThree() {
+    // Clear any previous run
+    this._oitTimeouts.forEach(t => clearTimeout(t));
+    this._oitTimeouts = [];
+
+    const l1 = $('oit-line1'), l2 = $('oit-line2'), l3 = $('oit-line3');
+    l1.classList.remove('show');
+    l2.classList.remove('show');
+    l3.classList.remove('show');
+    $('one-in-three').classList.add('on');
+
+    const v = ms => { if (navigator.vibrate) navigator.vibrate(ms); };
+
+    // t=0.3s: LOOK LEFT
+    this._oitTimeouts.push(setTimeout(() => { l1.classList.add('show'); v(220); }, 300));
+    // t=2.0s: hide LEFT
+    this._oitTimeouts.push(setTimeout(() => { l1.classList.remove('show'); }, 2000));
+    // t=2.3s: LOOK RIGHT
+    this._oitTimeouts.push(setTimeout(() => { l2.classList.add('show'); v(220); }, 2300));
+    // t=4.0s: hide RIGHT
+    this._oitTimeouts.push(setTimeout(() => { l2.classList.remove('show'); }, 4000));
+    // t=4.4s: final message
+    this._oitTimeouts.push(setTimeout(() => { l3.classList.add('show'); v([100,50,100]); }, 4400));
+  },
+
+  _stopOneInThree() {
+    this._oitTimeouts.forEach(t => clearTimeout(t));
+    this._oitTimeouts = [];
+    $('one-in-three').classList.remove('on');
+    $('oit-line1').classList.remove('show');
+    $('oit-line2').classList.remove('show');
+    $('oit-line3').classList.remove('show');
   },
 
   _startClock() {
