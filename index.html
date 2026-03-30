@@ -510,6 +510,47 @@ html, body {
   font-size: 12px;
 }
 
+/* ── LIVE TICKER (Stages 7-8) ── */
+#ticker-wrap {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: 34px;
+  overflow: hidden;
+  z-index: 35;
+  background: linear-gradient(transparent, rgba(8,12,20,0.9));
+  opacity: 0;
+  transition: opacity 0.8s ease;
+  pointer-events: none;
+}
+#ticker-wrap.on { opacity: 1; }
+
+#ticker-track {
+  display: flex;
+  white-space: nowrap;
+  height: 100%;
+  align-items: flex-end;
+  padding-bottom: 7px;
+  animation: tickerScroll 18s linear infinite;
+  will-change: transform;
+}
+@keyframes tickerScroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.ticker-msg {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #00e87a;
+  padding: 0 28px;
+  opacity: 0.7;
+}
+.ticker-dot {
+  font-size: 10px;
+  color: #ff3b5c;
+  opacity: 0.5;
+}
+
 /* ── AUDIO TOGGLE ── */
 #audio-toggle {
   position: fixed;
@@ -549,6 +590,11 @@ html, body {
 <body>
 
 <button id="audio-toggle" title="Toggle heartbeat sound">🔇</button>
+
+<!-- Live ticker (Stages 7-8) -->
+<div id="ticker-wrap">
+  <div id="ticker-track"></div>
+</div>
 
 <div id="status">
   <div id="status-dot"></div>
@@ -947,6 +993,8 @@ const App = {
   _clockStart: 0,
   _oitTimeouts: [],
   _dedShown: false,
+  _tickerOn: false,
+  _tickerTaps: 0,
   _pledgeDone: false,
   _pledgeHolding: false,
   _pledgeRaf: null,
@@ -1080,6 +1128,68 @@ const App = {
     await Backend.pledge();
   },
 
+  _buildTicker() {
+    // Pre-fill track with enough copies for seamless loop
+    const msgs = [
+      'Someone just committed to save a life',
+      'A donation is on its way',
+      'One tap. One life.',
+      'The room is alive',
+      'Blood is life — and you just gave it',
+    ];
+    const track = $('ticker-track');
+    track.innerHTML = '';
+    // Two identical runs side-by-side so the scroll loops seamlessly
+    for (let pass = 0; pass < 2; pass++) {
+      msgs.forEach(m => {
+        const span = document.createElement('span');
+        span.className = 'ticker-msg';
+        span.textContent = m;
+        track.appendChild(span);
+        const dot = document.createElement('span');
+        dot.className = 'ticker-dot';
+        dot.textContent = ' ● ';
+        track.appendChild(dot);
+      });
+    }
+  },
+
+  _showTicker() {
+    if (!this._tickerOn) {
+      this._buildTicker();
+      this._tickerOn = true;
+    }
+    $('ticker-wrap').classList.add('on');
+  },
+
+  _hideTicker() {
+    this._tickerOn = false;
+    $('ticker-wrap').classList.remove('on');
+  },
+
+  // Called whenever a new tap arrives while ticker is visible — injects a fresh message
+  _pushTicker() {
+    const track = $('ticker-track');
+    if (!track) return;
+    const live = document.createElement('span');
+    live.className = 'ticker-msg';
+    live.style.color = '#ff3b5c';
+    live.style.opacity = '1';
+    live.textContent = `+1 donation just landed`;
+    const dot = document.createElement('span');
+    dot.className = 'ticker-dot';
+    dot.textContent = ' ● ';
+    // Insert near front so it appears soon
+    track.insertBefore(dot, track.children[2] || null);
+    track.insertBefore(live, dot);
+    // Mirror into second half too
+    const live2 = live.cloneNode(true);
+    const dot2  = dot.cloneNode(true);
+    const mid   = Math.floor(track.children.length / 2);
+    track.insertBefore(dot2,  track.children[mid + 2] || null);
+    track.insertBefore(live2, dot2);
+  },
+
   _showDedication() {
     document.querySelectorAll('.ded-btn').forEach(b => b.classList.remove('selected'));
     $('dedication-sheet').classList.add('up');
@@ -1098,9 +1208,14 @@ const App = {
 
       // Update tap count
       if (state.taps !== this.taps) {
+        const prev = this.taps;
         this.taps = state.taps || 0;
         $('tap-total').textContent =
           `${this.taps} ${this.taps === 1 ? 'person' : 'people'} donated`;
+        // Push live message into ticker for each new tap
+        if (this._tickerOn && this.taps > prev) {
+          for (let i = 0; i < this.taps - prev; i++) this._pushTicker();
+        }
       }
 
       if (state.stage !== this.stage) {
@@ -1186,6 +1301,13 @@ const App = {
       this._showFaces();
     } else {
       this._hideFaces();
+    }
+
+    // Live ticker — stages 7 and 8
+    if (id === 7 || id === 8) {
+      this._showTicker();
+    } else {
+      this._hideTicker();
     }
   },
 
